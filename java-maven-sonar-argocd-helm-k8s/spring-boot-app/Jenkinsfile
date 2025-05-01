@@ -2,13 +2,15 @@ pipeline {
   agent {
     docker {
       image 'abhishekf5/maven-abhishek-docker-agent:v1'
-      args '--user root -v /var/run/docker.sock:/var/run/docker.sock --dns 8.8.8.8 --dns 8.8.4.4'
+      args '--user root -v /var/run/docker.sock:/var/run/docker.sock --add-host=host.docker.internal:host-gateway --dns 8.8.8.8'
     }
   }
   
   environment {
     APP_DIR = 'java-maven-sonar-argocd-helm-k8s/spring-boot-app'
     MANIFEST_DIR = 'java-maven-sonar-argocd-helm-k8s/spring-boot-app-manifests'
+    // Connect to local SonarQube via host.docker.internal
+    SONAR_URL = "http://host.docker.internal:9000"
   }
   
   stages {
@@ -26,7 +28,7 @@ pipeline {
         retry(3) {
           sh """
             cd ${APP_DIR} && \
-            mvn clean package -U -B -DskipTests
+            mvn clean package -U -B
           """
         }
       }
@@ -38,9 +40,6 @@ pipeline {
     }
     
     stage('Static Code Analysis') {
-      environment {
-        SONAR_URL = "http://localhost:9000"
-      }
       steps {
         withCredentials([string(credentialsId: 'sonarqube', variable: 'SONAR_AUTH_TOKEN')]) {
           sh """
@@ -57,7 +56,6 @@ pipeline {
     stage('Build and Push Docker Image') {
       environment {
         DOCKER_IMAGE = "hetpatel7131/ultimate-cicd:${BUILD_NUMBER}"
-        DOCKERFILE_LOCATION = "${APP_DIR}/Dockerfile"
       }
       steps {
         script {
@@ -68,7 +66,7 @@ pipeline {
           )]) {
             sh """
               cd ${APP_DIR} && \
-              docker build -t ${DOCKER_IMAGE} -f ${DOCKERFILE_LOCATION} .
+              docker build -t ${DOCKER_IMAGE} .
             """
             
             sh "echo ${DOCKER_PASS} | docker login -u ${DOCKER_USER} --password-stdin"
@@ -79,9 +77,6 @@ pipeline {
     }
     
     stage('Update Deployment File') {
-      environment {
-        GIT_REPO = "https://github.com/Hetpatel7131/Jenkins-Zero-To-Hero.git"
-      }
       steps {
         withCredentials([usernamePassword(
           credentialsId: 'github',
@@ -106,13 +101,16 @@ pipeline {
   }
   
   post {
+    always {
+      echo "Build ${currentBuild.currentResult} - ${BUILD_URL}"
+      cleanWs()
+    }
     failure {
-      slackSend channel: '#builds',
-                message: "Build ${BUILD_NUMBER} failed: ${BUILD_URL}"
+      // Add notification here (email, etc.)
+      echo "Build failed! Please check the logs at ${BUILD_URL}"
     }
     success {
-      slackSend channel: '#builds',
-                message: "Build ${BUILD_NUMBER} succeeded: ${BUILD_URL}"
+      echo "Build succeeded! Deployment updated to version ${BUILD_NUMBER}"
     }
   }
 }
