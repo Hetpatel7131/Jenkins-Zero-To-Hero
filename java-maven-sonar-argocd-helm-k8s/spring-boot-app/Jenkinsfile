@@ -9,7 +9,6 @@ pipeline {
   environment {
     APP_DIR = 'java-maven-sonar-argocd-helm-k8s/spring-boot-app'
     MANIFEST_DIR = 'java-maven-sonar-argocd-helm-k8s/spring-boot-app-manifests'
-    // Connect to local SonarQube via host.docker.internal
     SONAR_URL = "http://host.docker.internal:9000"
   }
   
@@ -102,15 +101,16 @@ pipeline {
   
   post {
     always {
-      echo "Build ${currentBuild.currentResult} - ${BUILD_URL}"
+      echo "Build Status: ${currentBuild.currentResult}"
+      echo "Build URL: ${BUILD_URL}"
       cleanWs()
     }
-    failure {
-      // Add notification here (email, etc.)
-      echo "Build failed! Please check the logs at ${BUILD_URL}"
-    }
     success {
-      echo "Build succeeded! Deployment updated to version ${BUILD_NUMBER}"
+      echo "SUCCESS: Pipeline completed successfully!"
+      echo "Docker Image: hetpatel7131/ultimate-cicd:${BUILD_NUMBER}"
+    }
+    failure {
+      echo "FAILURE: Pipeline failed - please check logs at ${BUILD_URL}"
     }
   }
 }
