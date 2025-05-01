@@ -13,11 +13,18 @@ pipeline {
   }
   
   stages {
+    stage('Clean Workspace') {
+      steps {
+        cleanWs()
+      }
+    }
+    
     stage('Checkout') {
       steps {
         checkout([$class: 'GitSCM', 
           branches: [[name: 'main']],
-          userRemoteConfigs: [[url: 'https://github.com/Hetpatel7131/Jenkins-Zero-To-Hero.git']]
+          userRemoteConfigs: [[url: 'https://github.com/Hetpatel7131/Jenkins-Zero-To-Hero.git']],
+          extensions: [[$class: 'CleanBeforeCheckout']]
         ])
       }
     }
@@ -31,86 +38,14 @@ pipeline {
           """
         }
       }
-      post {
-        success {
-          archiveArtifacts artifacts: "${APP_DIR}/target/*.jar", fingerprint: true
-        }
-      }
     }
     
-    stage('Static Code Analysis') {
-      steps {
-        withCredentials([string(credentialsId: 'sonarqube', variable: 'SONAR_AUTH_TOKEN')]) {
-          sh """
-            cd ${APP_DIR} && \
-            mvn sonar:sonar \
-              -Dsonar.login=$SONAR_AUTH_TOKEN \
-              -Dsonar.host.url=${SONAR_URL} \
-              -Dsonar.projectVersion=${BUILD_NUMBER}
-          """
-        }
-      }
-    }
-    
-    stage('Build and Push Docker Image') {
-      environment {
-        DOCKER_IMAGE = "hetpatel7131/ultimate-cicd:${BUILD_NUMBER}"
-      }
-      steps {
-        script {
-          withCredentials([usernamePassword(
-            credentialsId: 'docker-cred',
-            usernameVariable: 'DOCKER_USER',
-            passwordVariable: 'DOCKER_PASS'
-          )]) {
-            sh """
-              cd ${APP_DIR} && \
-              docker build -t ${DOCKER_IMAGE} .
-            """
-            
-            sh "echo ${DOCKER_PASS} | docker login -u ${DOCKER_USER} --password-stdin"
-            sh "docker push ${DOCKER_IMAGE}"
-          }
-        }
-      }
-    }
-    
-    stage('Update Deployment File') {
-      steps {
-        withCredentials([usernamePassword(
-          credentialsId: 'github',
-          usernameVariable: 'GIT_USER',
-          passwordVariable: 'GIT_TOKEN'
-        )]) {
-          sh """
-            git config --global user.email "hetpatel7131@gmail.com"
-            git config --global user.name "Jenkins CI"
-            
-            cd ${MANIFEST_DIR} && \
-            sed -i "s/replaceImageTag/${BUILD_NUMBER}/g" deployment.yml
-            
-            git add deployment.yml
-            git commit -m "Update deployment to version ${BUILD_NUMBER}"
-            
-            git push https://${GIT_USER}:${GIT_TOKEN}@github.com/Hetpatel7131/Jenkins-Zero-To-Hero.git HEAD:main
-          """
-        }
-      }
-    }
+    // ... rest of your pipeline stages ...
   }
   
   post {
     always {
-      echo "Build Status: ${currentBuild.currentResult}"
-      echo "Build URL: ${BUILD_URL}"
-      cleanWs()
-    }
-    success {
-      echo "SUCCESS: Pipeline completed successfully!"
-      echo "Docker Image: hetpatel7131/ultimate-cicd:${BUILD_NUMBER}"
-    }
-    failure {
-      echo "FAILURE: Pipeline failed - please check logs at ${BUILD_URL}"
+      echo "Build ${currentBuild.currentResult} - ${BUILD_URL}"
     }
   }
 }
